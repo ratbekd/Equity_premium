@@ -388,32 +388,100 @@ simulate_path_real <- function(
 # -----------------------------------------------------------------------------
 # 5. PLOTTING FUNCTIONS
 # -----------------------------------------------------------------------------
-
+# 
+# plot_rates <- function(sim, bands = list(
+#   RS = c(0.001, 0.010),
+#   RB = c(0.001, 0.012),
+#   RL = c(0.030, 0.040),
+#   RE = c(0.070, 0.090)
+# )) {
+#   df <- sim %>%
+#     transmute(t, RS, RB, RL, RE) %>%
+#     pivot_longer(-t, names_to = "rate", values_to = "value")
+# 
+#   banddf <- tibble(
+#     rate = rep(names(bands), each = 2),
+#     bound = rep(c("lo", "hi"), times = length(bands)),
+#     val = unlist(bands)
+#   ) %>%
+#     pivot_wider(names_from = "bound", values_from = "val")
+# 
+#   ggplot(df, aes(t, value, color = rate)) +
+#     geom_hline(data = banddf, aes(yintercept = lo), linetype = 3, alpha = .6) +
+#     geom_hline(data = banddf, aes(yintercept = hi), linetype = 3, alpha = .6) +
+#     geom_line(linewidth = 0.9) +
+#     scale_y_continuous(labels = percent_format(accuracy = 0.1)) +
+#     labs(title = "Real Rates vs Target Bands", y = "Rate (real)", x = "t") +
+#     theme_minimal(base_size = 12) +
+#     theme(legend.position = "bottom")
+# }
 plot_rates <- function(sim, bands = list(
   RS = c(0.001, 0.010),
   RB = c(0.001, 0.012),
   RL = c(0.030, 0.040),
-  RE = c(0.070, 0.090)
+  RN = c(0.070, 0.090)
 )) {
+  
+  # --- make RN available for plotting (use RE if RN not in sim) ---
+  if (!"RN" %in% names(sim)) {
+    if ("RE" %in% names(sim)) {
+      sim <- dplyr::rename(sim, RN = RE)
+    } else {
+      stop("plot_rates(): sim must contain either column 'RN' or 'RE'.")
+    }
+  }
+  
   df <- sim %>%
-    transmute(t, RS, RB, RL, RE) %>%
-    pivot_longer(-t, names_to = "rate", values_to = "value")
-
-  banddf <- tibble(
-    rate = rep(names(bands), each = 2),
+    dplyr::transmute(t, RS, RB, RL, RN) %>%
+    tidyr::pivot_longer(-t, names_to = "rate", values_to = "value")
+  
+  banddf <- tibble::tibble(
+    rate  = rep(names(bands), each = 2),
     bound = rep(c("lo", "hi"), times = length(bands)),
-    val = unlist(bands)
+    val   = unlist(bands, use.names = FALSE)
   ) %>%
-    pivot_wider(names_from = "bound", values_from = "val")
+    tidyr::pivot_wider(names_from = "bound", values_from = "val")
+  
+  ggplot2::ggplot(df, ggplot2::aes(t, value, color = rate)) +
+    ggplot2::geom_hline(data = banddf, ggplot2::aes(yintercept = lo),
+                        linetype = 3, alpha = 0.6) +
+    ggplot2::geom_hline(data = banddf, ggplot2::aes(yintercept = hi),
+                        linetype = 3, alpha = 0.6) +
+    ggplot2::geom_line(linewidth = 0.9) +
+    ggplot2::scale_y_continuous(labels = scales::percent_format(accuracy = 0.1)) +
+    ggplot2::labs(title = "Real Rates vs Target Bands", y = "Rate (real)", x = "t") +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(legend.position = "bottom")
+}
 
-  ggplot(df, aes(t, value, color = rate)) +
-    geom_hline(data = banddf, aes(yintercept = lo), linetype = 3, alpha = .6) +
-    geom_hline(data = banddf, aes(yintercept = hi), linetype = 3, alpha = .6) +
-    geom_line(linewidth = 0.9) +
-    scale_y_continuous(labels = percent_format(accuracy = 0.1)) +
-    labs(title = "Real Rates vs Target Bands", y = "Rate (real)", x = "t") +
-    theme_minimal(base_size = 12) +
-    theme(legend.position = "bottom")
+
+plot_spreads <- function(sim) {
+  
+  # --- make RN available for plotting (use RE if RN not in sim) ---
+  if (!"RN" %in% names(sim)) {
+    if ("RE" %in% names(sim)) {
+      sim <- dplyr::rename(sim, RN = RE)
+    } else {
+      stop("plot_spreads(): sim must contain either column 'RN' or 'RE'.")
+    }
+  }
+  
+  df <- sim %>%
+    dplyr::transmute(
+      t,
+      `RB - RS` = RB - RS,
+      `RL - RB` = RL - RB,
+      `RN - RB` = RN - RB
+    ) %>%
+    tidyr::pivot_longer(-t, names_to = "spread", values_to = "value")
+  
+  ggplot2::ggplot(df, ggplot2::aes(t, value, color = spread)) +
+    ggplot2::geom_hline(yintercept = 0, color = "grey60") +
+    ggplot2::geom_line(linewidth = 0.9) +
+    ggplot2::scale_y_continuous(labels = scales::percent_format(accuracy = 0.1)) +
+    ggplot2::labs(title = "Spreads", y = "Spread (real)", x = "t") +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(legend.position = "bottom")
 }
 
 plot_spreads <- function(sim) {
@@ -422,7 +490,7 @@ plot_spreads <- function(sim) {
       t,
       `RB - RS` = RB - RS,
       `RL - RB` = RL - RB,
-      `RE - RB` = RE - RB
+      `RN - RB` = RE - RB
     ) %>%
     pivot_longer(-t, names_to = "spread", values_to = "value")
 
@@ -1018,7 +1086,7 @@ ggplot(plot_df_long, aes(x = t, y = value, colour = series)) +
   )
 
 # After running calibration and simulation:
-make_lp_decomposition_table(res, sim_trim)
+#make_lp_decomposition_table(res, sim_trim)
 # cal <- res$calibration
 #
 # B-E`[1:n_periods]
